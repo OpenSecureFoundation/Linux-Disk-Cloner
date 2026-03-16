@@ -1,0 +1,3 @@
+gcc -O2 -Wall -fPIC -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -shared -o libclone.so clone_engine.c
+
+pip install flask flask-cors
