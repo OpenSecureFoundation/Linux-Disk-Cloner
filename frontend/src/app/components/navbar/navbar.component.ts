@@ -32,6 +32,11 @@ import { HealthInfo } from '../../models';
             <i class="bi bi-journal-text me-1"></i>Journaux
           </a>
         </li>
+	<li class="nav-item">
+ 	  <a class="nav-link" routerLink="/progress" routerLinkActive="active">
+   	     <i class="bi bi-activity me-1"></i>Progression
+ 	  </a>
+	 </li>
       </ul>
       <div class="d-flex align-items-center gap-2" *ngIf="health">
         <span class="badge" [class]="health.mock_mode ? 'bg-warning text-dark' : 'bg-success'">

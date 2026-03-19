@@ -27,7 +27,8 @@
 #include <sys/stat.h>
 #include <sys/dkio.h>       /* DKIOCGMEDIAINFO — taille du disque */
 #include <sys/vtoc.h>       /* Structure des partitions Solaris */
-#include <sys/mnttab.h>     /* /etc/mnttab — disques montés */
+#include <sys/mnttab.h>
+#include <stdarg.h>     /* /etc/mnttab — disques montés */
 
 /* ─── Constantes ─────────────────────────────────────────────── */
 #define BLOCK_SIZE_DEFAULT  (1 * 1024 * 1024)   /* 1 Mo par défaut */
@@ -211,7 +212,7 @@ int list_disks(DiskList *list) {
      * Format : c<ctrl>t<target>d<disk>  (sans slice = disque entier)
      * Exemple : c0t0d0, c0t1d0, c1t0d0
      */
-    FILE *cmd = popen("ls /dev/rdsk/ 2>/dev/null | grep -E '^c[0-9]+t[0-9]+d[0-9]+$'", "r");
+    FILE *cmd = popen("ls /dev/rdsk/ 2>/dev/null | grep -E '^c[0-9]+(t[0-9]+)?d[0-9]+p0$'", "r");
     if (!cmd) return ERR_INVALID_PARAM;
 
     char name[64];
@@ -311,11 +312,12 @@ int clone_disk(const CloneParams *params) {
     }
 
     /* Déterminer si la destination est un fichier ou un device */
-    int dst_flags = O_WRONLY;
+    /*int dst_flags = O_WRONLY;
     struct stat st;
     if (stat(params->dst_path, &st) == 0 && S_ISREG(st.st_mode)) {
         dst_flags |= O_CREAT | O_TRUNC;
-    }
+    }*/
+    int dst_flags = O_WRONLY | O_CREAT | O_TRUNC;
 
     int fd_dst = open(params->dst_path, dst_flags, 0644);
     if (fd_dst < 0) {

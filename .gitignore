@@ -1,0 +1,7 @@
+__pycache__/
+backend/__pycache__/
+frontend/.angular/
+frontend/node_modules/
+libclone.so
+core
+

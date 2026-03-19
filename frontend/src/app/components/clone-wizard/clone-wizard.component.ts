@@ -223,7 +223,10 @@ import { DiskInfo, CloneStep } from '../../models';
       <div class="spinner-border text-info mx-auto mb-3" style="width:3rem;height:3rem;"></div>
       <h4 class="text-white">Clonage en cours...</h4>
       <p class="text-secondary">Rendez-vous sur la page <strong>Progression</strong> pour suivre l'avancement.</p>
-      <button class="btn btn-info mt-2" routerLink="/dashboard">Tableau de bord</button>
+     	<button class="btn btn-info mt-2" routerLink="/progress">
+ 	 Voir la progression
+	</button>
+	<button class="btn btn-info mt-2" routerLink="/dashboard">Tableau de bord</button>
     </div>
   </div>
 </div>
