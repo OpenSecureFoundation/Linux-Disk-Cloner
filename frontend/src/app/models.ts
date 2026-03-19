@@ -6,6 +6,7 @@ export interface DiskInfo {
   is_mounted: boolean;
   mount_point: string;
   is_system_disk: boolean;
+  filesystem: string;
 }
 
 export interface CloneStatus {
@@ -42,6 +43,8 @@ export interface CloneRequest {
   block_size: number;
   force: boolean;
   confirm: string;
+  mode:     number;
+  compress: boolean;
 }
 
 export type CloneStep = 'select-source' | 'select-dest' | 'confirm' | 'cloning' | 'done';

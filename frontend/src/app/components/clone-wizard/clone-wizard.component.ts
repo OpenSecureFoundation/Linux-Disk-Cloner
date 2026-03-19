@@ -135,6 +135,21 @@ import { DiskInfo, CloneStep } from '../../models';
             <button class="btn btn-outline-warning" (click)="selectCustomDst()">Utiliser</button>
           </div>
         </div>
+	<div class="mt-3">
+	  <label class="form-label text-secondary fw-bold">Mode de clonage :</label>
+	  <div class="d-flex gap-2 flex-wrap">
+	    <div class="card border-2 p-3 text-center"
+	         *ngFor="let m of modes"
+	         [class.border-info]="selectedMode === m.value"
+	         [class.border-secondary]="selectedMode !== m.value"
+	         style="cursor:pointer;background:#1a1d20;min-width:140px;"
+	         (click)="selectedMode = m.value">
+	      <i class="bi fs-3 mb-1" [class]="m.icon" [class.text-info]="selectedMode === m.value"></i>
+	      <div class="fw-bold text-white small">{{ m.label }}</div>
+	      <small class="text-secondary">{{ m.desc }}</small>
+	    </div>
+	  </div>
+	</div>
         <div class="mt-3">
           <label class="form-label text-secondary">Taille des blocs :</label>
           <select class="form-select bg-dark border-secondary text-white" [(ngModel)]="blockSize" style="width:auto;">
@@ -251,6 +266,13 @@ export class CloneWizardComponent implements OnInit {
   blockSize = 1048576;
   launching = false;
   launchError = '';
+  selectedMode = 1;
+  compress = false;
+  modes = [
+    { value: 1, label: 'Disk → Image', icon: 'bi-hdd-fill', desc: 'Sauvegarde vers .img' },
+    { value: 2, label: 'Image → Disk', icon: 'bi-arrow-down-circle', desc: 'Restaurer une image' },
+    { value: 3, label: 'Disk → Disk', icon: 'bi-arrow-left-right', desc: 'Clonage direct' },
+  ];
 
   get currentStepIndex() { return this.steps.findIndex(s => s.key === this.currentStep); }
   get destinationDisks() { return this.disks.filter(d => d.path !== this.selectedSrc?.path); }
@@ -282,7 +304,9 @@ export class CloneWizardComponent implements OnInit {
         path: this.customSrcPath.trim(),
         name: this.customSrcPath.trim().split('/').pop() || 'custom',
         size_bytes: 0, size_human: '?',
-        is_mounted: false, mount_point: '', is_system_disk: false,
+        is_mounted: false, mount_point: '', 
+	is_system_disk: false,
+	filesystem: '',
       };
     }
   }
@@ -293,7 +317,8 @@ export class CloneWizardComponent implements OnInit {
         path: this.customDstPath.trim(),
         name: this.customDstPath.trim().split('/').pop() || 'output',
         size_bytes: 0, size_human: 'Nouveau fichier',
-        is_mounted: false, mount_point: '', is_system_disk: false,
+        is_mounted: false, mount_point: '', 
+	is_system_disk: false, filesystem: '',
       };
     }
   }
@@ -339,6 +364,8 @@ export class CloneWizardComponent implements OnInit {
       block_size: this.blockSize,
       force: false,
       confirm: 'CLONER',
+      mode: this.selectedMode,
+      compress: this.compress,
     }).subscribe({
       next: () => { this.launching = false; this.currentStep = 'cloning'; },
       error: e => { this.launching = false; this.launchError = e.error?.message || `Erreur ${e.status}`; },

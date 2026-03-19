@@ -108,6 +108,7 @@ import { DiskInfo, HealthInfo } from '../../models';
           <thead class="table-secondary">
             <tr>
               <th class="ps-3">Périphérique</th>
+	      <th>Système de fichiers</th>
               <th>Taille</th>
               <th>État</th>
               <th>Point de montage</th>
@@ -129,6 +130,9 @@ import { DiskInfo, HealthInfo } from '../../models';
                   </div>
                 </div>
               </td>
+	      <td>
+		<span class="badge bg-info text-dark">{{ disk.filesystem || 'inconnu' }}</span>
+	      </td>
               <td><span class="badge bg-secondary fs-6">{{ disk.size_human }}</span></td>
               <td>
                 <span class="badge" [class]="disk.is_mounted ? 'bg-warning text-dark' : 'bg-success'">

@@ -67,6 +67,7 @@ class CDiskInfo(ctypes.Structure):
         ("is_mounted",    ctypes.c_int),
         ("mount_point",   ctypes.c_char * MAX_PATH_LEN),
         ("is_system_disk", ctypes.c_int),
+	("filesystem",     ctypes.c_char * 32),
     ]
 
 class CDiskList(ctypes.Structure):
@@ -83,6 +84,8 @@ class CCloneParams(ctypes.Structure):
         ("dst_path",   ctypes.c_char * MAX_PATH_LEN),
         ("block_size", ctypes.c_uint32),
         ("force",      ctypes.c_int),
+	("compress",   ctypes.c_int),
+	("mode",       ctypes.c_int),
     ]
 
 class CCloneStatus(ctypes.Structure):
@@ -110,6 +113,7 @@ class DiskInfo:
     is_mounted:     bool
     mount_point:    str
     is_system_disk: bool
+    filesystem:     str = ""
 
     def to_dict(self):
         return {
@@ -120,6 +124,7 @@ class DiskInfo:
             "is_mounted":     self.is_mounted,
             "mount_point":    self.mount_point,
             "is_system_disk": self.is_system_disk,
+	    "filesystem":     self.filesystem,
         }
 
 @dataclass
@@ -227,6 +232,7 @@ class DiskClonerEngine:
                 is_mounted=bool(d.is_mounted),
                 mount_point=d.mount_point.decode("utf-8", errors="replace"),
                 is_system_disk=bool(d.is_system_disk),
+		filesystem=d.filesystem.decode("utf-8", errors="replace"),
             ))
         return result
 
@@ -236,6 +242,8 @@ class DiskClonerEngine:
         dst: str,
         block_size: int = 1024 * 1024,
         force: bool = False,
+        compress: bool = False,
+        mode: int = 0,
         on_complete: Optional[Callable] = None,
     ) -> bool:
         """
@@ -255,6 +263,8 @@ class DiskClonerEngine:
                 params.dst_path   = dst.encode("utf-8")
                 params.block_size = ctypes.c_uint32(block_size)
                 params.force      = ctypes.c_int(1 if force else 0)
+                params.compress   = ctypes.c_int(1 if compress else 0)
+                params.mode       = ctypes.c_int(mode)
                 self._lib.clone_disk(ctypes.byref(params))
             if on_complete:
                 on_complete(self.get_status())

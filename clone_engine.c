@@ -61,6 +61,7 @@ typedef struct {
     int     is_mounted;               /* 1 si monté, 0 sinon */
     char    mount_point[MAX_PATH_LEN];/* ex: "/" si monté */
     int     is_system_disk;           /* 1 si c'est le disque système */
+    char    filesystem[32];	      /* systeme de fuchier */
 } DiskInfo;
 
 /* Liste des disques détectés */
@@ -75,6 +76,8 @@ typedef struct {
     char     dst_path[MAX_PATH_LEN];  /* destination : /dev/rdsk/c0t1d0 ou fichier */
     uint32_t block_size;              /* taille des blocs en octets */
     int      force;                   /* 1 = ignorer les warnings (option experte) */
+    int      compress;     /* ← 1 = compresser en gzip */
+    int      mode;         /* ← 0=clone, 1=disk2img, 2=img2disk, 3=disk2disk */
 } CloneParams;
 
 /* État en temps réel du clonage (partagé avec Python via mmap/polling) */
@@ -234,6 +237,33 @@ int list_disks(DiskList *list) {
             close(fd);
         }
         bytes_to_human(disk->size_bytes, disk->size_human, sizeof(disk->size_human));
+
+	/* Détecter le système de fichiers */
+	char fs_cmd[512];
+	snprintf(fs_cmd, sizeof(fs_cmd),
+	    "df -n /dev/dsk/%s 2>/dev/null | awk '{print $4}' | head -1", name);
+	FILE *fs_f = popen(fs_cmd, "r");
+	if (fs_f) {
+	    fgets(disk->filesystem, sizeof(disk->filesystem), fs_f);
+	    disk->filesystem[strcspn(disk->filesystem, "\n")] = 0;
+	    pclose(fs_f);
+	}
+	if (strlen(disk->filesystem) == 0) {
+	    /* Essayer zpool */
+	    snprintf(fs_cmd, sizeof(fs_cmd),
+	        "zpool list -H -o name 2>/dev/null | head -1");
+	    FILE *zf = popen(fs_cmd, "r");
+	    if (zf) {
+	        char zname[32] = {0};
+	        fgets(zname, sizeof(zname), zf);
+	        zname[strcspn(zname, "\n")] = 0;
+	        pclose(zf);
+	        if (strlen(zname) > 0)
+	            strncpy(disk->filesystem, "ZFS", sizeof(disk->filesystem)-1);
+	        else
+	            strncpy(disk->filesystem, "unknown", sizeof(disk->filesystem)-1);
+	    }
+	}
 
         /* Vérifier si monté */
         disk->is_mounted = is_device_mounted(disk->path, disk->mount_point);
@@ -443,6 +473,18 @@ int clone_disk(const CloneParams *params) {
     fsync(fd_dst);   /* Flush vers le disque physique */
     close(fd_src);
     close(fd_dst);
+
+    /* Compression gzip si demandée */
+    if (params->compress && params->mode == 1) {
+        char gz_cmd[512];
+        snprintf(gz_cmd, sizeof(gz_cmd), "gzip -f '%s'", params->dst_path);
+        g_status.status = 1;
+        snprintf(g_status.message, sizeof(g_status.message),
+                 "Compression en cours...");
+        system(gz_cmd);
+        snprintf(g_status.message, sizeof(g_status.message),
+                 "Image compressée : %s.gz", params->dst_path);
+    }
 
     if (g_cancel) {
         g_status.status = 3;

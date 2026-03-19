@@ -166,7 +166,17 @@ def start_clone():
         dst=dst,
         block_size=block_size,
         force=force,
+	compress=bool(data.get("compress", False)),
+   	mode=int(data.get("mode", 0)),
     )
+
+    mode = int(data.get("mode", 0))
+    # 0=clone général, 1=disk→img, 2=img→disk, 3=disk→disk
+    if mode not in [0, 1, 2, 3]:
+        return error("Mode invalide (0=auto, 1=disk2img, 2=img2disk, 3=disk2disk)", 400)
+
+    compress = bool(data.get("compress", False))
+
 
     if not started:
         return error("Impossible de démarrer le clonage", 500)
