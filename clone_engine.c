@@ -145,30 +145,24 @@ static uint64_t get_disk_size(int fd) {
 
 /* Vérifie si un chemin de device est monté (via /etc/mnttab) */
 static int is_device_mounted(const char *dev_path, char *mount_point_out) {
-    FILE *f = fopen(MNTTAB, "r");  /* /etc/mnttab sur Solaris */
+    FILE *f = fopen(MNTTAB, "r");
     if (!f) return 0;
 
     struct mnttab mnt;
+    /* Extraire le nom de base ex: c2d1 depuis c2d1p0 */
+    char base[64] = {0};
+    const char *slash = strrchr(dev_path, '/');
+    const char *dev_name = slash ? slash + 1 : dev_path;
+    /* Enlever p0 ou s0 à la fin pour avoir c2d1 */
+    strncpy(base, dev_name, sizeof(base)-1);
+    int len = strlen(base);
+    if (len > 2 && (base[len-2] == 'p' || base[len-2] == 's'))
+        base[len-2] = 0;
+
     while (getmntent(f, &mnt) == 0) {
-        /* Comparer avec /dev/dsk/ et /dev/rdsk/ */
-        char dsk_path[MAX_PATH_LEN];
-        snprintf(dsk_path, sizeof(dsk_path), "%s", mnt.mnt_special);
-
-        /* Normaliser : /dev/rdsk/ <-> /dev/dsk/ */
-        char normalized_dev[MAX_PATH_LEN];
-        snprintf(normalized_dev, sizeof(normalized_dev), "%s", dev_path);
-
-        if (strstr(normalized_dev, "/rdsk/")) {
-            /* Remplacer /rdsk/ par /dsk/ pour la comparaison */
-            char *p = strstr(normalized_dev, "/rdsk/");
-            memmove(p + 4, p + 5, strlen(p + 5) + 1);
-            memcpy(p + 1, "dsk", 3);
-        }
-
-        if (strcmp(dsk_path, normalized_dev) == 0 ||
-            strcmp(mnt.mnt_special, dev_path) == 0) {
+        if (strstr(mnt.mnt_special, base)) {
             if (mount_point_out)
-                strncpy(mount_point_out, mnt.mnt_mountp, MAX_PATH_LEN - 1);
+                strncpy(mount_point_out, mnt.mnt_mountp, MAX_PATH_LEN-1);
             fclose(f);
             return 1;
         }
@@ -179,27 +173,26 @@ static int is_device_mounted(const char *dev_path, char *mount_point_out) {
 
 /* Vérifie si un device contient le système de fichiers racine */
 static int is_system_disk(const char *dev_path) {
-    struct stat st_root, st_dev;
-    char mount_pt[MAX_PATH_LEN] = {0};
+    /* Vérifier si ce device fait partie du pool rpool */
+    char cmd[512];
+    const char *slash = strrchr(dev_path, '/');
+    const char *dev_name = slash ? slash + 1 : dev_path;
+    char base[64] = {0};
+    strncpy(base, dev_name, sizeof(base)-1);
+    int len = strlen(base);
+    if (len > 2 && (base[len-2] == 'p' || base[len-2] == 's'))
+        base[len-2] = 0;
 
-    if (stat("/", &st_root) != 0) return 0;
-
-    /* Vérifier via mnttab si ce device est monté sur "/" */
-    FILE *f = fopen(MNTTAB, "r");
+    snprintf(cmd, sizeof(cmd),
+        "zpool status rpool 2>/dev/null | grep -c '%s'", base);
+    FILE *f = popen(cmd, "r");
     if (!f) return 0;
-
-    struct mnttab mnt;
-    while (getmntent(f, &mnt) == 0) {
-        if (strcmp(mnt.mnt_mountp, "/") == 0) {
-            if (strstr(dev_path, strrchr(mnt.mnt_special, '/') + 1) != NULL) {
-                fclose(f);
-                return 1;
-            }
-        }
-    }
-    fclose(f);
-    return 0;
+    int count = 0;
+    fscanf(f, "%d", &count);
+    pclose(f);
+    return count > 0;
 }
+
 
 /* ─── API publique exportée vers Python/ctypes ──────────────── */
 
@@ -239,31 +232,30 @@ int list_disks(DiskList *list) {
         bytes_to_human(disk->size_bytes, disk->size_human, sizeof(disk->size_human));
 
 	/* Détecter le système de fichiers */
-	char fs_cmd[512];
-	snprintf(fs_cmd, sizeof(fs_cmd),
-	    "df -n /dev/dsk/%s 2>/dev/null | awk '{print $4}' | head -1", name);
-	FILE *fs_f = popen(fs_cmd, "r");
-	if (fs_f) {
-	    fgets(disk->filesystem, sizeof(disk->filesystem), fs_f);
-	    disk->filesystem[strcspn(disk->filesystem, "\n")] = 0;
-	    pclose(fs_f);
-	}
-	if (strlen(disk->filesystem) == 0) {
-	    /* Essayer zpool */
-	    snprintf(fs_cmd, sizeof(fs_cmd),
-	        "zpool list -H -o name 2>/dev/null | head -1");
-	    FILE *zf = popen(fs_cmd, "r");
-	    if (zf) {
-	        char zname[32] = {0};
-	        fgets(zname, sizeof(zname), zf);
-	        zname[strcspn(zname, "\n")] = 0;
-	        pclose(zf);
-	        if (strlen(zname) > 0)
-	            strncpy(disk->filesystem, "ZFS", sizeof(disk->filesystem)-1);
-	        else
-	            strncpy(disk->filesystem, "unknown", sizeof(disk->filesystem)-1);
-	    }
-	}
+/* Détecter filesystem via mnttab d'abord */
+FILE *mt = fopen(MNTTAB, "r");
+struct mnttab mnt2;
+char base_name[64] = {0};
+strncpy(base_name, name, sizeof(base_name)-1);
+int blen = strlen(base_name);
+if (blen > 2 && (base_name[blen-2] == 'p' || base_name[blen-2] == 's'))
+    base_name[blen-2] = 0;
+
+int fs_found = 0;
+if (mt) {
+    while (getmntent(mt, &mnt2) == 0) {
+        if (strstr(mnt2.mnt_special, base_name)) {
+            strncpy(disk->filesystem, mnt2.mnt_fstype,
+                    sizeof(disk->filesystem)-1);
+            fs_found = 1;
+            break;
+        }
+    }
+    fclose(mt);
+}
+if (!fs_found)
+    strncpy(disk->filesystem, "ZFS", sizeof(disk->filesystem)-1);
+
 
         /* Vérifier si monté */
         disk->is_mounted = is_device_mounted(disk->path, disk->mount_point);
